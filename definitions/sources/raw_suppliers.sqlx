@@ -1,0 +1,8 @@
+config {
+  type: "declaration",  
+  schema: `${dataform.projectConfig.vars.dataset_id_landing}`,
+  name: "raw_suppliers", 
+  description: 'Suppliers raw table'
+}
+
+

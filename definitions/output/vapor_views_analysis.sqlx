@@ -1,0 +1,45 @@
+config {
+    tags: ["process"],
+    type: "table",
+    description: "Matching clients from VaporViews and Premier Bank",
+    schema: `${dataform.projectConfig.vars.dataset_id_exposure}`,
+    database: `${dataform.projectConfig.vars.dataset_projectid_exposure}`,
+    name: "vapor_views_analysis"
+}
+
+
+WITH joined as (
+    SELECT
+    vvt.*,
+    IF(ct.account_number IS NULL, true, false) as is_client_match
+    FROM ${ref("vapor_views_test")} vvt 
+    LEFT JOIN ${ref("curated_transactions")} ct ON vvt.account_number = ct.account_number
+)
+,customer_quality AS (
+    SELECT j.*,
+        CASE
+            WHEN SAFE_DIVIDE((IFNULL(mortgage,0) + IFNULL(loan,0)), IFNULL(income,0)) <= 20 THEN 3
+            WHEN SAFE_DIVIDE((IFNULL(mortgage,0) + IFNULL(loan,0)), IFNULL(income,0)) > 20 AND SAFE_DIVIDE((IFNULL(mortgage,0) + IFNULL(loan,0)), IFNULL(income,0)) <= 50 THEN 2
+            WHEN SAFE_DIVIDE((IFNULL(mortgage,0) + IFNULL(loan,0)), IFNULL(income,0)) > 50 THEN 1
+            ELSE NULL 
+        END AS debt_to_income_ratio_score,
+        CASE housing 
+            WHEN 'own' THEN 3
+            WHEN 'rent' THEN 2
+            WHEN 'other' THEN 1
+        END as housing_score,
+        CASE securities 
+            WHEN true THEN 3
+            WHEN false THEN 1
+        END as securities_score,
+        CASE cd_account 
+            WHEN true THEN 3
+            WHEN false THEN 1
+        END as cd_account_score
+    FROM joined j
+)
+
+SELECT cq.*,
+IFNULL(debt_to_income_ratio_score,0) + IFNULL(housing_score,0) +IFNULL(securities_score,0) +IFNULL(cd_account_score,0) as customer_score
+FROM customer_quality cq
+
